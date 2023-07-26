@@ -139,16 +139,12 @@ class SM3:
 
         for j in range(64):
             if j < 16:
-                ss1 = rotation_left(A, 12) + E + rotation_left(self.T[0], j)
+                ss1 = rotation_left((rotation_left(A, 12) + E + rotation_left(self.T[0], j)) % self.maxu32, 7)
             elif j >= 16:
-                ss1 = rotation_left(A, 12) + E + rotation_left(self.T[1], j)
-            ss1 = ss1 & self.maxu32
-            ss1 = rotation_left(right_without_sign(ss1, 0), 7)
+                ss1 = rotation_left((rotation_left(A, 12) + E + rotation_left(self.T[1], j)) % self.maxu32, 7)
             ss2 = ss1 ^ rotation_left(A, 12)
-            tt1 = self.ff(A, B, C, j) + D + ss2 + self.w2[j]
-            tt1 = right_without_sign(tt1 & 0xfffffffa, 0)
-            tt2 = self.gg(E, F, G, j) + H + ss1 + self.w1[j]
-            tt2 = right_without_sign(tt2 & 0xffafffff, 0)
+            tt1 = (self.ff(A, B, C, j) + D + ss2 + self.w2[j]) % self.maxu32
+            tt2 = (self.gg(E, F, G, j) + H + ss1 + self.w1[j]) % self.maxu32
             D = C
             C = rotation_left(B, 9)
             B = A
@@ -183,7 +179,7 @@ class SM3:
     def sm3_final(self):
         digest_str = ""
         for i in range(len(self.IV)):
-            digest_str += hex(self.IV[i])[2:]
+            digest_str += f'{self.IV[i]:08x}'
 
         return digest_str.lower()
 
@@ -248,6 +244,64 @@ class YRX3SM3(SM3):
             msg_new_bytes[temp] = int(str, 2) #将2进制字符串按byte为组转换为整数
         return msg_new_bytes
 
+    def sm3_compress(self,msg):
+        # 压缩函数
+        # 输入参数v为初始化参数，类型为bytes/bytearray，大小为256bit
+        # 输入参数msg为512bit的待压缩数据
+
+        self.sm3_msg_extend(msg)
+        ss1 = 0
+
+        A = self.IV[0]
+        B = self.IV[1]
+        C = self.IV[2]
+        D = self.IV[3]
+        E = self.IV[4]
+        F = self.IV[5]
+        G = self.IV[6]
+        H = self.IV[7]
+
+        for j in range(64):
+            if j < 16:
+                ss1 = rotation_left(A, 12) + E + rotation_left(self.T[0], j)
+            elif j >= 16:
+                ss1 = rotation_left(A, 12) + E + rotation_left(self.T[1], j)
+            ss1 = ss1 & self.maxu32
+            ss1 = rotation_left(right_without_sign(ss1, 0), 7)
+            ss2 = ss1 ^ rotation_left(A, 12)
+            tt1 = self.ff(A, B, C, j) + D + ss2 + self.w2[j]
+            tt1 = right_without_sign(tt1 & 0xfffffffa, 0)
+            tt2 = self.gg(E, F, G, j) + H + ss1 + self.w1[j]
+            tt2 = right_without_sign(tt2 & 0xffafffff, 0)
+            D = C
+            C = rotation_left(B, 9)
+            B = A
+            A = tt1
+            H = G
+            G = rotation_left(F, 19)
+            F = E
+            E = self.p(tt2, 0)
+
+            # 测试IV的压缩中间值
+            # print("j= %d：" % j, hex(A)[2:], hex(B)[2:], hex(C)[2:], hex(D)[2:], hex(E)[2:], hex(F)[2:], hex(G)[2:], hex(H)[2:])
+
+        self.IV[0] ^= A
+        self.IV[1] ^= B
+        self.IV[2] ^= C
+        self.IV[3] ^= D
+        self.IV[4] ^= E
+        self.IV[5] ^= F
+        self.IV[6] ^= G
+        self.IV[7] ^= H
+
+
+class YRX6SM3(SM3):
+    def __init__(self):
+        self.IV = [0x7322266f, 0x2224b2b9, 0x172005d7, 0xd2210600, 0xaaaa30bc, 0x1aaaa8aa, 0xedddee4d, 0xb0ee0e4e]
+        self.T = [2027754777, 2054647178]
+        self.maxu32 = 2 ** 32
+        self.w1 = [0] * 68
+        self.w2 = [0] * 64
 
 
 if __name__ == "__main__":
@@ -274,6 +328,14 @@ if __name__ == "__main__":
     # file_digest = test3.hashFile("test.exe")
     # print('file_digest', file_digest)
 
-    s = YRX3SM3()
-    s.sm3_update('16859546283933'.encode())
+    # s = YRX3SM3()
+    # s.sm3_update('16859546283933'.encode())
+    # print(s.sm3_final())
+    s = YRX6SM3()
+    s.sm3_update('a51edb86b414c4a8885fe4e8f4082aeb'.encode())
     print(s.sm3_final())
+    s = YRX6SM3()
+    s.sm3_update('7cfebf9469c055386b776cccbec9e25e'.encode())
+    print(s.sm3_final())
+    
+
